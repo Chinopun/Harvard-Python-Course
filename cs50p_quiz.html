@@ -1,0 +1,1987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS50P Interactive Quiz</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+<style>
+:root {
+  --bg:           #0d1117;
+  --sidebar-bg:   #161b22;
+  --card:         #21262d;
+  --border:       #30363d;
+  --text:         #e6edf3;
+  --muted:        #7d8590;
+  --accent:       #58a6ff;
+  --accent-dim:   #1f3a5c;
+  --success:      #3fb950;
+  --success-dim:  #0d2e14;
+  --error:        #f85149;
+  --error-dim:    #3d0f0d;
+  --warning:      #e3b341;
+  --warning-dim:  #3d2b00;
+  --radius:       8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+
+/* ── LOADING ── */
+#loading {
+  position: fixed; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; background: var(--bg); z-index: 100;
+}
+#loading h1 { font-size: 1.6rem; margin-bottom: 8px; color: var(--accent); }
+#loading p  { color: var(--muted); margin-bottom: 24px; }
+.spinner {
+  width: 48px; height: 48px; border: 4px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── LAYOUT ── */
+#app { display: none; height: 100vh; flex-direction: row; }
+#app.ready { display: flex; }
+
+/* ── SIDEBAR ── */
+#sidebar {
+  width: 270px; min-width: 270px; background: var(--sidebar-bg);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  overflow: hidden;
+}
+#sidebar-header {
+  padding: 16px; border-bottom: 1px solid var(--border);
+}
+#sidebar-header h1 { font-size: 1rem; font-weight: 700; color: var(--text); }
+#sidebar-header .subtitle { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+#progress-wrap { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+#progress-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+#progress-bar-bg { background: var(--border); border-radius: 99px; height: 6px; }
+#progress-bar-fill { height: 6px; border-radius: 99px; background: var(--accent); transition: width 0.4s; }
+#week-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+.week-group { }
+.week-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; cursor: pointer; font-size: 0.82rem; font-weight: 600;
+  color: var(--muted); user-select: none; transition: color 0.15s;
+}
+.week-header:hover { color: var(--text); }
+.week-header.active-week { color: var(--accent); }
+.week-badge {
+  font-size: 0.68rem; padding: 1px 7px; border-radius: 99px;
+  background: var(--card); color: var(--muted); font-weight: 500;
+}
+.week-badge.done { background: var(--success-dim); color: var(--success); }
+.task-list { display: none; }
+.task-list.open { display: block; }
+.task-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 16px 6px 28px;
+  cursor: pointer; font-size: 0.8rem; color: var(--muted);
+  border-left: 2px solid transparent; transition: all 0.12s;
+}
+.task-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+.task-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-dim); }
+.task-item.done { color: var(--success); }
+.task-item .ti-icon { font-size: 0.7rem; flex-shrink: 0; width: 14px; text-align: center; }
+#score-label { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 0.78rem; color: var(--muted); }
+#score-label span { color: var(--warning); font-weight: 700; }
+
+/* ── MAIN ── */
+#main {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+}
+#task-header {
+  padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+  background: var(--sidebar-bg);
+}
+#task-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; }
+#task-concept {
+  display: inline-block; font-size: 0.72rem; padding: 2px 10px;
+  border-radius: 99px; background: var(--accent-dim); color: var(--accent);
+  font-family: monospace; font-weight: 600;
+}
+#content-area {
+  flex: 1; display: flex; overflow: hidden;
+}
+#left-panel {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+}
+#description-box {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  overflow-y: auto; max-height: 220px; font-size: 0.84rem; line-height: 1.65;
+  color: var(--text); background: var(--bg);
+}
+#description-box pre {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 14px; font-size: 0.8rem; margin: 8px 0; overflow-x: auto;
+  white-space: pre-wrap; color: #79c0ff;
+}
+#editor-wrap {
+  flex: 1; overflow: hidden; position: relative;
+}
+#editor-label {
+  padding: 8px 20px 4px; font-size: 0.72rem; font-weight: 600;
+  color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase;
+  background: var(--sidebar-bg); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+#editor-label-right { display: flex; align-items: center; gap: 16px; }
+#starter-toggle {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted); user-select: none;
+}
+#starter-toggle:hover { color: var(--text); }
+#starter-toggle input {
+  accent-color: var(--accent); cursor: pointer; width: 13px; height: 13px;
+}
+.CodeMirror {
+  height: 100% !important; font-size: 13.5px !important;
+  line-height: 1.5 !important;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace !important;
+}
+.CodeMirror-scroll { padding-bottom: 8px; }
+.CodeMirror pre.CodeMirror-line, .CodeMirror pre.CodeMirror-line-like {
+  line-height: 1.5 !important;
+}
+.CodeMirror-linenumber {
+  line-height: 1.5 !important;
+  padding: 0 8px 0 5px !important;
+}
+.CodeMirror-gutters {
+  line-height: 1.5 !important;
+}
+
+/* ── CONTROLS ── */
+#controls {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; border-top: 1px solid var(--border);
+  background: var(--sidebar-bg);
+}
+.btn {
+  padding: 7px 18px; border-radius: var(--radius); border: none;
+  font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
+  font-family: inherit;
+}
+.btn-primary {
+  background: var(--accent); color: #0d1117;
+}
+.btn-primary:hover { background: #79c0ff; }
+.btn-primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+.btn-secondary {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger {
+  background: transparent; color: var(--muted); border: 1px solid var(--border);
+}
+.btn-danger:hover { color: var(--error); border-color: var(--error); }
+#run-status { font-size: 0.78rem; color: var(--muted); margin-left: auto; }
+
+/* ── RESULTS PANEL ── */
+#results-panel {
+  border-top: 1px solid var(--border); max-height: 280px;
+  overflow-y: auto; background: var(--bg);
+}
+#results-inner { padding: 12px 20px; }
+.result-header { font-size: 0.78rem; font-weight: 700; margin-bottom: 10px; letter-spacing: 0.05em; text-transform: uppercase; }
+.result-row {
+  display: flex; gap: 10px; margin-bottom: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 14px; font-size: 0.82rem;
+}
+.result-row.pass { border-color: var(--success); background: var(--success-dim); }
+.result-row.fail { border-color: var(--error); background: var(--error-dim); }
+.result-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+.result-details { flex: 1; min-width: 0; }
+.result-title { font-weight: 600; margin-bottom: 4px; }
+.result-diff { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.diff-line { font-family: monospace; font-size: 0.78rem; }
+.diff-expected { color: var(--success); }
+.diff-got      { color: var(--error); }
+.diff-err      { color: var(--warning); }
+
+/* ── HINTS SIDEBAR ── */
+#hints-panel {
+  width: 260px; min-width: 260px; border-left: 1px solid var(--border);
+  background: var(--sidebar-bg); display: flex; flex-direction: column;
+  overflow: hidden; transition: width 0.2s;
+}
+#hints-panel.collapsed { width: 0; min-width: 0; border: none; }
+#hints-header {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  font-size: 0.82rem; font-weight: 700; color: var(--warning);
+  display: flex; align-items: center; justify-content: space-between;
+}
+#hints-close { cursor: pointer; color: var(--muted); font-size: 1rem; }
+#hints-close:hover { color: var(--text); }
+#hints-content { padding: 12px 16px; flex: 1; overflow-y: auto; }
+.hint-item {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; margin-bottom: 8px; font-size: 0.8rem; line-height: 1.6;
+  color: var(--text);
+}
+.hint-item code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 0.76rem; color: #79c0ff; }
+.hint-locked { color: var(--muted); font-size: 0.78rem; text-align: center; padding: 8px; }
+
+/* ── SUCCESS OVERLAY ── */
+#success-overlay {
+  display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.75);
+  align-items: center; justify-content: center; z-index: 50;
+}
+#success-overlay.show { display: flex; }
+#success-card {
+  background: var(--card); border: 1px solid var(--success);
+  border-radius: 12px; padding: 32px 40px; text-align: center; max-width: 360px;
+}
+#success-card .big-emoji { font-size: 3rem; margin-bottom: 12px; }
+#success-card h2 { font-size: 1.4rem; margin-bottom: 8px; color: var(--success); }
+#success-card p { color: var(--muted); margin-bottom: 20px; font-size: 0.88rem; }
+#success-card .btns { display: flex; gap: 10px; justify-content: center; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <h1 style="margin-top:24px">CS50P Quiz</h1>
+  <p id="load-msg">Loading Python runtime…</p>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <h1>CS50P Quiz</h1>
+      <div class="subtitle">Harvard · Intro to Python</div>
+    </div>
+    <div id="progress-wrap">
+      <div id="progress-label">
+        <span id="prog-text">0 / 34 tasks</span>
+        <span id="score-text">0 pts</span>
+      </div>
+      <div id="progress-bar-bg"><div id="progress-bar-fill" style="width:0%"></div></div>
+    </div>
+    <div id="week-list"></div>
+    <div id="score-label">Score: <span id="score-big">0</span> pts</div>
+  </aside>
+
+  <!-- Main -->
+  <main id="main">
+    <div id="task-header">
+      <div id="task-title">Select a task to begin</div>
+      <span id="task-concept"></span>
+    </div>
+    <div id="content-area">
+      <div id="left-panel">
+        <div id="description-box">
+          <p style="color:var(--muted);font-size:0.9rem">
+            ← Choose a week and task from the sidebar to get started.<br><br>
+            Each task gives you a coding challenge. Write your solution in the editor, then click <strong>Run Tests</strong>.
+          </p>
+        </div>
+        <div id="editor-label">
+          <span>answer.py</span>
+          <div id="editor-label-right">
+            <label id="starter-toggle" title="When off, the editor starts blank so you can write the whole solution yourself">
+              <input type="checkbox" id="starter-toggle-input" checked>
+              <span>Starter code</span>
+            </label>
+            <span id="py-status" style="color:var(--muted)">Python loading…</span>
+          </div>
+        </div>
+        <div id="editor-wrap">
+          <textarea id="code-editor"></textarea>
+        </div>
+        <div id="controls">
+          <button class="btn btn-primary" id="run-btn" disabled>▶ Run Tests</button>
+          <button class="btn btn-secondary" id="hint-btn">💡 Hints</button>
+          <button class="btn btn-secondary" id="reset-btn" title="Clear your saved code for this task and reload the template">↺ Reset</button>
+          <button class="btn btn-danger" id="skip-btn">Skip →</button>
+          <span id="run-status"></span>
+        </div>
+        <div id="results-panel" style="display:none">
+          <div id="results-inner"></div>
+        </div>
+      </div>
+      <div id="hints-panel" class="collapsed">
+        <div id="hints-header">
+          <span>💡 Hints</span>
+          <span id="hints-close">✕</span>
+        </div>
+        <div id="hints-content"></div>
+      </div>
+    </div>
+
+    <!-- Success overlay -->
+    <div id="success-overlay">
+      <div id="success-card">
+        <div class="big-emoji">🎉</div>
+        <h2>All tests passed!</h2>
+        <p id="success-msg"></p>
+        <div class="btns">
+          <button class="btn btn-primary" id="next-btn">Next Task →</button>
+          <button class="btn btn-secondary" id="stay-btn">Stay Here</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- CodeMirror -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// QUIZ DATA  — 10 weeks, 34 tasks
+// ═══════════════════════════════════════════════════════════════
+const WEEKS = [
+
+// ────────── WEEK 0 · FUNCTIONS & VARIABLES ──────────
+{
+  number: 0, title: "Functions & Variables",
+  intro: "Python's building blocks: print(), input(), variables, type conversion, f-strings, and defining your own functions.",
+  tasks: [
+    {
+      id:"w0t1", title:"Hello, Name!", concept:"print() and input()",
+      description:`Ask the user for their name, then print a personalised greeting.
+
+<pre>Input:  David
+Output: hello, David</pre>
+
+Requirements
+• Use input() to capture the name
+• Print exactly:  hello, &lt;name&gt;   (lowercase 'hello', comma, space)`,
+      starter:`# Week 0, Task 1 — Hello, Name!
+# Ask for the user's name and greet them.
+
+name = input("What's your name? ")
+print(...)  # replace ... with the greeting
+`,
+      tests:[
+        {input:"David\n", expected:"hello, David"},
+        {input:"world\n", expected:"hello, world"},
+        {input:"Alice\n", expected:"hello, Alice"},
+      ],
+      hints:[
+        'Use an f-string: <code>print(f"hello, {name}")</code>',
+        'Or concatenation: <code>print("hello, " + name)</code>',
+        'Output must be exactly:  hello, &lt;name&gt;  — lowercase h, comma, space.',
+      ],
+    },
+    {
+      id:"w0t2", title:"Sum Two Numbers", concept:"int(), type conversion",
+      description:`Ask the user for two numbers and print their integer sum.
+
+<pre>Input:  1  then  2
+Output: 3</pre>
+
+Requirements
+• Use input() twice
+• Convert each to int with int()
+• Print the sum (no decimal point)`,
+      starter:`# Week 0, Task 2 — Sum Two Numbers
+
+x = input("x: ")
+y = input("y: ")
+
+# Convert to int and print the sum
+`,
+      tests:[
+        {input:"1\n2\n", expected:"3"},
+        {input:"10\n20\n", expected:"30"},
+        {input:"0\n0\n", expected:"0"},
+      ],
+      hints:[
+        'Convert as you read: <code>x = int(input("x: "))</code>',
+        'Then: <code>print(x + y)</code>',
+        "Without int(), '1' + '2' == '12' (string concat) — not what we want!",
+      ],
+    },
+    {
+      id:"w0t3", title:"Title Case Greeting", concept:"f-strings, str.capitalize()",
+      description:`Ask for a first and last name (may be lowercase). Print a title-cased greeting.
+
+<pre>Input:  harry   then   potter
+Output: Hello, Harry Potter</pre>
+
+Requirements
+• Capitalise each name properly
+• Output format:  Hello, &lt;First&gt; &lt;Last&gt;`,
+      starter:`# Week 0, Task 3 — Title Case Greeting
+
+first = input("First name: ")
+last  = input("Last name: ")
+
+# Print: Hello, <First> <Last>  (title case)
+`,
+      tests:[
+        {input:"harry\npotter\n", expected:"Hello, Harry Potter"},
+        {input:"hermione\ngranger\n", expected:"Hello, Hermione Granger"},
+        {input:"Alice\nSmith\n", expected:"Hello, Alice Smith"},
+      ],
+      hints:[
+        "<code>'harry'.capitalize()</code> → 'Harry'",
+        'f-string: <code>print(f"Hello, {first.capitalize()} {last.capitalize()}")</code>',
+        "Or .title() on each name — same result for single words.",
+      ],
+    },
+    {
+      id:"w0t4", title:"Define square()", concept:"def, return",
+      description:`Write a function square(n) that returns n squared, then use it.
+
+<pre>Input:  3
+Output: 9</pre>
+
+Requirements
+• <code>def square(n):</code> — return the result (don't print inside the function)
+• Read an integer from the user, print square(x)`,
+      starter:`# Week 0, Task 4 — Define a Function
+
+def square(n):
+    ...  # return n squared
+
+
+x = int(input("Enter a number: "))
+print(square(x))
+`,
+      tests:[
+        {input:"3\n", expected:"9"},
+        {input:"5\n", expected:"25"},
+        {input:"0\n", expected:"0"},
+        {input:"10\n", expected:"100"},
+      ],
+      hints:[
+        "Replace ... with: <code>return n * n</code>",
+        "Or: <code>return n ** 2</code>",
+        "Use return, not print, inside the function.",
+      ],
+    },
+    {
+      id:"w0t5", title:"String Methods", concept:"str.strip(), str.upper()",
+      description:`Ask the user for a word (may have surrounding spaces). Strip whitespace, print in UPPERCASE.
+
+<pre>Input:  '  hello  '
+Output: HELLO</pre>`,
+      starter:`# Week 0, Task 5 — String Methods
+
+word = input("Word: ")
+# strip whitespace, convert to uppercase, then print
+`,
+      tests:[
+        {input:"  hello  \n", expected:"HELLO"},
+        {input:"python\n", expected:"PYTHON"},
+        {input:"  CS50  \n", expected:"CS50"},
+      ],
+      hints:[
+        "Chain methods: <code>word.strip().upper()</code>",
+        "Or step by step: <code>word = word.strip()</code> then <code>print(word.upper())</code>",
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 1 · CONDITIONALS ──────────
+{
+  number: 1, title: "Conditionals",
+  intro: "Make decisions with if / elif / else, boolean operators, the modulo operator, and match.",
+  tasks: [
+    {
+      id:"w1t1", title:"Compare Two Numbers", concept:"if / elif / else",
+      description:`Ask for two integers x and y. Print their relationship.
+
+<pre>x=3, y=5  →  x is less than y
+x=5, y=3  →  x is greater than y
+x=4, y=4  →  x is equal to y</pre>`,
+      starter:`# Week 1, Task 1 — Compare Two Numbers
+
+x = int(input("x: "))
+y = int(input("y: "))
+
+# if / elif / else to print the relationship
+`,
+      tests:[
+        {input:"3\n5\n", expected:"x is less than y"},
+        {input:"5\n3\n", expected:"x is greater than y"},
+        {input:"4\n4\n", expected:"x is equal to y"},
+      ],
+      hints:[
+        "<code>if x &lt; y: print('x is less than y')</code>",
+        "<code>elif x &gt; y: print('x is greater than y')</code>",
+        "<code>else: print('x is equal to y')</code>",
+      ],
+    },
+    {
+      id:"w1t2", title:"Grade Calculator", concept:"chained comparisons, elif",
+      description:`Ask for a score (0–100) and print the letter grade.
+
+<pre>90–100 → A    80–89 → B    70–79 → C    60–69 → D    0–59 → F
+
+Input:  95  →  A
+Input:  72  →  C</pre>`,
+      starter:`# Week 1, Task 2 — Grade Calculator
+
+score = int(input("Score: "))
+
+# Determine the letter grade
+`,
+      tests:[
+        {input:"95\n", expected:"A"},
+        {input:"85\n", expected:"B"},
+        {input:"75\n", expected:"C"},
+        {input:"65\n", expected:"D"},
+        {input:"55\n", expected:"F"},
+      ],
+      hints:[
+        "Start with the highest: <code>if score >= 90: print('A')</code>",
+        "Use elif for each subsequent band.",
+        "Python allows chaining: <code>if 80 &lt;= score &lt; 90:</code>",
+      ],
+    },
+    {
+      id:"w1t3", title:"Odd or Even", concept:"modulo operator %",
+      description:`Ask for an integer. Print "Even" or "Odd".
+
+<pre>Input: 4  →  Even
+Input: 7  →  Odd
+Input: 0  →  Even</pre>`,
+      starter:`# Week 1, Task 3 — Odd or Even
+# Hint: the % operator gives the remainder
+
+n = int(input("Number: "))
+# print Even or Odd
+`,
+      tests:[
+        {input:"4\n", expected:"Even"},
+        {input:"7\n", expected:"Odd"},
+        {input:"0\n", expected:"Even"},
+        {input:"13\n", expected:"Odd"},
+      ],
+      hints:[
+        "<code>n % 2</code> is 0 for even numbers, 1 for odd",
+        "<code>if n % 2 == 0: print('Even')</code>",
+        "<code>else: print('Odd')</code>",
+      ],
+    },
+    {
+      id:"w1t4", title:"Hogwarts Sorting Hat", concept:"match statement",
+      description:`Use a match statement to sort students into houses.
+
+<pre>Harry | Hermione | Ron  →  Gryffindor
+Draco                   →  Slytherin
+Luna                    →  Ravenclaw
+Cedric                  →  Hufflepuff
+anything else           →  Who?</pre>`,
+      starter:`# Week 1, Task 4 — Sorting Hat (match)
+
+name = input("Name: ")
+
+match name:
+    case ...:
+        ...
+`,
+      tests:[
+        {input:"Harry\n", expected:"Gryffindor"},
+        {input:"Hermione\n", expected:"Gryffindor"},
+        {input:"Ron\n", expected:"Gryffindor"},
+        {input:"Draco\n", expected:"Slytherin"},
+        {input:"Luna\n", expected:"Ravenclaw"},
+        {input:"Cedric\n", expected:"Hufflepuff"},
+        {input:"Voldemort\n", expected:"Who?"},
+      ],
+      hints:[
+        '<code>case "Harry" | "Hermione" | "Ron": print("Gryffindor")</code>',
+        '<code>case _: print("Who?")</code>  — the default (wildcard) case',
+        "The | symbol in match means 'or' between values.",
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 2 · LOOPS ──────────
+{
+  number: 2, title: "Loops",
+  intro: "Repeat code with while and for loops, range(), lists, and break/continue.",
+  tasks: [
+    {
+      id:"w2t1", title:"Countdown", concept:"while loop",
+      description:`Ask for a positive integer n. Count down from n to 1, then print "Blastoff!".
+
+<pre>n=3  →
+3
+2
+1
+Blastoff!</pre>`,
+      starter:`# Week 2, Task 1 — Countdown
+
+n = int(input("n: "))
+
+# count down, then Blastoff!
+`,
+      tests:[
+        {input:"3\n", expected:"3\n2\n1\nBlastoff!"},
+        {input:"5\n", expected:"5\n4\n3\n2\n1\nBlastoff!"},
+        {input:"1\n", expected:"1\nBlastoff!"},
+      ],
+      hints:[
+        "<code>while n > 0: print(n); n -= 1</code>",
+        "After the loop: <code>print('Blastoff!')</code>",
+        "Or use a for loop: <code>for i in range(n, 0, -1):</code>",
+      ],
+    },
+    {
+      id:"w2t2", title:"Sum 1 to n", concept:"for loop, range()",
+      description:`Ask for a positive integer n. Print the sum of 1 through n.
+
+<pre>n=5  →  15   (1+2+3+4+5)
+n=10 →  55</pre>`,
+      starter:`# Week 2, Task 2 — Sum 1 to n
+
+n = int(input("n: "))
+total = 0
+
+# use for i in range(...) to accumulate the sum
+
+print(total)
+`,
+      tests:[
+        {input:"5\n", expected:"15"},
+        {input:"10\n", expected:"55"},
+        {input:"1\n", expected:"1"},
+        {input:"100\n", expected:"5050"},
+      ],
+      hints:[
+        "<code>range(1, n+1)</code> produces 1, 2, 3, …, n",
+        "<code>for i in range(1, n+1): total += i</code>",
+        "Bonus: <code>print(sum(range(1, n+1)))</code> does it in one line!",
+      ],
+    },
+    {
+      id:"w2t3", title:"FizzBuzz", concept:"for loop, modulo, conditionals",
+      description:`Classic FizzBuzz! Ask for n, then print numbers 1 to n with substitutions:
+
+<pre>divisible by 3 AND 5  →  FizzBuzz
+divisible by 3 only   →  Fizz
+divisible by 5 only   →  Buzz
+otherwise             →  the number</pre>`,
+      starter:`# Week 2, Task 3 — FizzBuzz
+
+n = int(input("n: "))
+
+for i in range(1, n + 1):
+    # your conditions here
+    pass
+`,
+      tests:[
+        {input:"15\n", expected:"1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz"},
+        {input:"5\n",  expected:"1\n2\nFizz\n4\nBuzz"},
+        {input:"3\n",  expected:"1\n2\nFizz"},
+      ],
+      hints:[
+        "Check FizzBuzz FIRST (divisible by both), then Fizz, then Buzz.",
+        "<code>if i % 15 == 0: print('FizzBuzz')</code>  — or check i%3==0 and i%5==0",
+        "Remove the 'pass' line once you add real code.",
+      ],
+    },
+    {
+      id:"w2t4", title:"Validate Input Loop", concept:"while True / break",
+      description:`Keep asking the user for a positive integer until they provide one (> 0). Once valid, print it.
+
+<pre>Input: -5  (invalid — ask again)
+Input:  0  (invalid — ask again)
+Input:  3  →  3</pre>`,
+      starter:`# Week 2, Task 4 — Input Validation Loop
+
+while True:
+    n = int(input("n: "))
+    # break when n is valid (> 0)
+    ...
+
+print(n)
+`,
+      tests:[
+        {input:"-1\n0\n5\n", expected:"5"},
+        {input:"3\n",        expected:"3"},
+        {input:"-10\n-5\n0\n1\n", expected:"1"},
+      ],
+      hints:[
+        "<code>if n > 0: break</code>",
+        "The <code>while True</code> loop keeps going until you break out of it.",
+        "Remove the '...' and replace with your if statement.",
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 3 · EXCEPTIONS ──────────
+{
+  number: 3, title: "Exceptions",
+  intro: "Handle errors gracefully with try / except blocks.",
+  tasks: [
+    {
+      id:"w3t1", title:"Safe Integer Input", concept:"try / except ValueError",
+      description:`Ask for an integer. If invalid, print "Not a valid integer." and ask again. Once valid, print it.
+
+<pre>Input: cat    →  Not a valid integer.
+Input: 3.14   →  Not a valid integer.
+Input: 42     →  42</pre>`,
+      starter:`# Week 3, Task 1 — Safe Integer Input
+
+while True:
+    try:
+        n = int(input("Integer: "))
+        break
+    except ValueError:
+        print(...)  # fill in the error message
+
+print(n)
+`,
+      tests:[
+        {input:"cat\n42\n", expected:"Not a valid integer.\n42"},
+        {input:"3.14\n7\n", expected:"Not a valid integer.\n7"},
+        {input:"5\n",       expected:"5"},
+      ],
+      hints:[
+        'Replace ... with: <code>"Not a valid integer."</code>',
+        "The try block attempts int(input(...)). If it fails, except runs.",
+        "break exits the loop once a valid integer is entered.",
+      ],
+    },
+    {
+      id:"w3t2", title:"Safe Division", concept:"try / except ZeroDivisionError",
+      description:`Ask for two integers x and y. Print x / y as a float. If y == 0, print "Error: division by zero."
+
+<pre>x=10, y=2  →  5.0
+x=10, y=0  →  Error: division by zero.
+x=7,  y=2  →  3.5</pre>`,
+      starter:`# Week 3, Task 2 — Safe Division
+
+x = int(input("x: "))
+y = int(input("y: "))
+
+try:
+    ...
+except ZeroDivisionError:
+    print("Error: division by zero.")
+`,
+      tests:[
+        {input:"10\n2\n", expected:"5.0"},
+        {input:"10\n0\n", expected:"Error: division by zero."},
+        {input:"7\n2\n",  expected:"3.5"},
+      ],
+      hints:[
+        "Replace ... with: <code>print(x / y)</code>",
+        "x / y in Python always returns a float (e.g. 5.0, 3.5)",
+        "ZeroDivisionError is raised automatically — your except catches it.",
+      ],
+    },
+    {
+      id:"w3t3", title:"Robust Positive Integer", concept:"try / except in while loop",
+      description:`Keep asking until the user enters a positive integer. Handle both non-numeric input and non-positive numbers silently.
+
+<pre>Input: "cat"  →  (ask again)
+Input: -3     →  (ask again)
+Input: 5      →  5</pre>`,
+      starter:`# Week 3, Task 3 — Robust Positive Integer
+
+while True:
+    try:
+        n = int(input("Positive integer: "))
+        if n > 0:
+            break
+    except ValueError:
+        pass
+
+print(n)
+`,
+      tests:[
+        {input:"cat\n-3\n5\n", expected:"5"},
+        {input:"-1\n0\n7\n",   expected:"7"},
+        {input:"10\n",         expected:"10"},
+      ],
+      hints:[
+        "This starter is already correct — try running it!",
+        "'pass' means 'do nothing'; the loop will restart on ValueError.",
+        "If n &lt;= 0, neither break nor pass triggers, so the loop restarts.",
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 4 · LIBRARIES ──────────
+{
+  number: 4, title: "Libraries",
+  intro: "Use Python's standard library (random, sys) and third-party packages.",
+  tasks: [
+    {
+      id:"w4t1", title:"Random Number", concept:"import random, random.randint()",
+      description:`Ask for a positive integer n. Print a random integer between 1 and n (inclusive).
+
+<pre>Input: 10  →  some number between 1 and 10</pre>
+
+Requirements
+• import random
+• Use random.randint(1, n)
+• The grader checks that your output is in range, not the exact value.`,
+      starter:`# Week 4, Task 1 — Random Number
+import random
+
+n = int(input("n: "))
+result = random.randint(1, n)
+print(result)
+`,
+      tests:[
+        {input:"10\n", expected:null, validator:"range_1_to_n", n_value:10},
+        {input:"1\n",  expected:"1"},
+      ],
+      hints:[
+        "import random goes at the top of the file.",
+        "random.randint(a, b) returns a random integer N where a &lt;= N &lt;= b.",
+        "The starter code is already correct — just run it!",
+      ],
+    },
+    {
+      id:"w4t2", title:"Coin Flip Simulation", concept:"random.choice(), counters",
+      description:`Ask for n (number of flips). Simulate n coin flips and print the totals.
+
+<pre>Input: 10  →
+Heads: 6
+Tails: 4</pre>
+
+The grader checks Heads + Tails == n (exact counts will vary).`,
+      starter:`# Week 4, Task 2 — Coin Flip Simulation
+import random
+
+n = int(input("Flips: "))
+heads = 0
+tails = 0
+
+for _ in range(n):
+    flip = random.choice(["Heads", "Tails"])
+    ...  # increment heads or tails
+
+print(f"Heads: {heads}")
+print(f"Tails: {tails}")
+`,
+      tests:[
+        {input:"10\n",  expected:null, validator:"heads_tails_sum", n_value:10},
+        {input:"100\n", expected:null, validator:"heads_tails_sum", n_value:100},
+      ],
+      hints:[
+        "<code>if flip == 'Heads': heads += 1</code>  else: <code>tails += 1</code>",
+        "Replace the ... with that if/else block.",
+        "Heads + Tails should equal n.",
+      ],
+    },
+    {
+      id:"w4t3", title:"Command-Line Args", concept:"import sys, sys.argv",
+      description:`Write a program that reads its name argument from the command line.
+
+<pre>python answer.py          →  Hello, world
+python answer.py David    →  Hello, David</pre>
+
+Requirements
+• import sys
+• sys.argv[0] is the script name; sys.argv[1] is the first argument`,
+      starter:`# Week 4, Task 3 — sys.argv
+import sys
+
+if len(sys.argv) == 2:
+    print(f"Hello, {sys.argv[1]}")
+else:
+    print("Hello, world")
+`,
+      tests:[
+        {input:"", expected:"Hello, world",  argv:[]},
+        {input:"", expected:"Hello, David",  argv:["David"]},
+        {input:"", expected:"Hello, Alice",  argv:["Alice"]},
+      ],
+      hints:[
+        "sys.argv is a list: [script_name, arg1, arg2, ...]",
+        "len(sys.argv) == 1 means no arguments were given.",
+        "The starter is already correct — read it carefully!",
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 5 · UNIT TESTS ──────────
+{
+  number: 5, title: "Unit Tests",
+  intro: "Write test functions using assert to verify your code is correct.",
+  tasks: [
+    {
+      id:"w5t1", title:"Test square()", concept:"assert, test functions",
+      description:`Implement square(n) AND write tests for it.
+
+Your file must contain:
+• <code>def square(n):</code>  — returns n * n
+• <code>def test_positive():</code>  — asserts square(2)==4 and square(3)==9
+• <code>def test_negative():</code>  — asserts square(-2)==4
+• <code>def test_zero():</code>  — asserts square(0)==0
+• Call all three + print "All tests passed!" at the bottom
+
+<pre>Output: All tests passed!</pre>`,
+      starter:`# Week 5, Task 1 — Test square()
+
+def square(n):
+    return n * n
+
+
+def test_positive():
+    assert square(2) == 4
+    assert square(3) == 9
+
+
+def test_negative():
+    assert square(-2) == 4
+    assert square(-3) == 9
+
+
+def test_zero():
+    assert square(0) == 0
+
+
+# Run all tests
+test_positive()
+test_negative()
+test_zero()
+print("All tests passed!")
+`,
+      tests:[{input:"\n", expected:"All tests passed!"}],
+      hints:[
+        "The starter is already complete — try breaking square() to see a failing assert.",
+        "<code>assert condition</code> raises AssertionError if condition is False.",
+        "(-2) * (-2) == 4, so square(-2) should return 4.",
+      ],
+    },
+    {
+      id:"w5t2", title:"Raise & Catch ValueError", concept:"raise ValueError",
+      description:`Write only_positive(n):
+• Returns n if n > 0
+• Raises ValueError if n &lt;= 0
+
+Then test both paths:
+
+<pre>Output:
+5
+Invalid</pre>`,
+      starter:`# Week 5, Task 2 — Raise & Catch ValueError
+
+def only_positive(n):
+    if n > 0:
+        return n
+    raise ValueError("n must be positive")
+
+
+try:
+    print(only_positive(5))
+except ValueError:
+    print("Invalid")
+
+try:
+    print(only_positive(-1))
+except ValueError:
+    print("Invalid")
+`,
+      tests:[{input:"\n", expected:"5\nInvalid"}],
+      hints:[
+        "<code>raise ValueError('message')</code> throws an exception upward.",
+        "try/except ValueError catches it.",
+        "The starter is already correct — study it to understand the pattern.",
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 6 · FILE I/O ──────────
+{
+  number: 6, title: "File I/O",
+  intro: "Read from and write to files, and work with CSV data.",
+  tasks: [
+    {
+      id:"w6t1", title:"Write & Read a File", concept:"open(), with, read/write modes",
+      description:`Ask for a name, write "Hello, &lt;name&gt;!" to greeting.txt, then read and print it.
+
+<pre>Input: Alice  →  Hello, Alice!</pre>`,
+      starter:`# Week 6, Task 1 — Write & Read a File
+
+name = input("Name: ")
+
+with open("greeting.txt", "w") as f:
+    f.write(f"Hello, {name}!")
+
+with open("greeting.txt", "r") as f:
+    print(f.read())
+`,
+      tests:[
+        {input:"Alice\n", expected:"Hello, Alice!"},
+        {input:"CS50\n",  expected:"Hello, CS50!"},
+      ],
+      hints:[
+        "<code>open('file', 'w')</code> creates/overwrites; <code>'r'</code> reads.",
+        "Use with to auto-close: <code>with open(...) as f: ...</code>",
+        "f.write() writes a string; f.read() returns the whole file.",
+      ],
+    },
+    {
+      id:"w6t2", title:"CSV DictReader", concept:"csv.DictReader",
+      description:`Your program creates a CSV file then reads it.
+
+<pre>Expected output:
+Harry is in Gryffindor
+Draco is in Slytherin
+Luna is in Ravenclaw</pre>`,
+      starter:`# Week 6, Task 2 — CSV DictReader
+import csv
+
+# Create the test CSV
+with open("students.csv", "w") as f:
+    f.write("name,house\\n")
+    f.write("Harry,Gryffindor\\n")
+    f.write("Draco,Slytherin\\n")
+    f.write("Luna,Ravenclaw\\n")
+
+# Read with DictReader
+with open("students.csv") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        print(f"{row['name']} is in {row['house']}")
+`,
+      tests:[{input:"\n", expected:"Harry is in Gryffindor\nDraco is in Slytherin\nLuna is in Ravenclaw"}],
+      hints:[
+        "csv.DictReader reads each row as a dict keyed by column header.",
+        "Access fields with <code>row['name']</code> and <code>row['house']</code>.",
+        "The starter is correct — run it to see it work.",
+      ],
+    },
+    {
+      id:"w6t3", title:"Collect & Sort Names", concept:"file write, sorted()",
+      description:`Ask for names until the user presses Enter with no input. Write to names.txt, then print sorted alphabetically.
+
+<pre>Input: Charlie, Alice, Bob, (empty)
+Output:
+Alice
+Bob
+Charlie</pre>`,
+      starter:`# Week 6, Task 3 — Collect & Sort Names
+
+with open("names.txt", "w") as f:
+    while True:
+        name = input("Name: ")
+        if not name:
+            break
+        f.write(name + "\\n")
+
+with open("names.txt") as f:
+    names = f.read().splitlines()
+
+for name in sorted(names):
+    print(name)
+`,
+      tests:[
+        {input:"Charlie\nAlice\nBob\n\n", expected:"Alice\nBob\nCharlie"},
+        {input:"Zara\nAmy\n\n",           expected:"Amy\nZara"},
+      ],
+      hints:[
+        "Open with 'w' to start fresh each run.",
+        "<code>f.read().splitlines()</code> gives a list of lines without \\n.",
+        "<code>sorted(names)</code> returns a new sorted list.",
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 7 · REGULAR EXPRESSIONS ──────────
+{
+  number: 7, title: "Regular Expressions",
+  intro: "Search and manipulate text with the re module and pattern matching.",
+  tasks: [
+    {
+      id:"w7t1", title:"Validate Email", concept:"re.search(), patterns",
+      description:`Ask for an email address. Print "Valid" or "Invalid".
+
+<pre>malan@harvard.edu  →  Valid
+not-an-email       →  Invalid
+a@b.c              →  Valid
+missing@domain     →  Invalid</pre>
+
+Pattern: <code>\\S+@\\S+\\.\\S+</code>  (something@something.something)`,
+      starter:`# Week 7, Task 1 — Email Validator
+import re
+
+email = input("Email: ")
+
+if re.search(r"^\\S+@\\S+\\.\\S+$", email):
+    print("Valid")
+else:
+    print("Invalid")
+`,
+      tests:[
+        {input:"malan@harvard.edu\n", expected:"Valid"},
+        {input:"not-an-email\n",       expected:"Invalid"},
+        {input:"a@b.c\n",              expected:"Valid"},
+        {input:"missing@domain\n",     expected:"Invalid"},
+      ],
+      hints:[
+        '<code>re.search(r"^\\S+@\\S+\\.\\S+$", email)</code>',
+        '\\S+ = 1+ non-whitespace chars. \\. = literal dot.',
+        "^ anchors to start, $ anchors to end of string.",
+      ],
+    },
+    {
+      id:"w7t2", title:"Extract & Sum Numbers", concept:"re.findall()",
+      description:`Ask for a sentence. Extract all integers and print their sum.
+
+<pre>"I have 3 cats and 12 dogs"  →  15
+"No numbers here"            →  0
+"100 plus 200 equals 300"    →  600</pre>`,
+      starter:`# Week 7, Task 2 — Extract & Sum Numbers
+import re
+
+sentence = input("Sentence: ")
+numbers = re.findall(r"\\d+", sentence)
+total = sum(int(n) for n in numbers)
+print(total)
+`,
+      tests:[
+        {input:"I have 3 cats and 12 dogs\n", expected:"15"},
+        {input:"No numbers here\n",           expected:"0"},
+        {input:"100 plus 200 equals 300\n",   expected:"600"},
+      ],
+      hints:[
+        '<code>re.findall(r"\\d+", text)</code> returns a list of digit strings.',
+        "Convert each to int before summing: <code>[int(n) for n in numbers]</code>",
+        "sum([]) == 0, so 'No numbers' outputs 0 automatically.",
+      ],
+    },
+    {
+      id:"w7t3", title:"Clean Phone Number", concept:"re.sub()",
+      description:`Ask for a phone number in any format. Remove all non-digit characters and print it.
+
+<pre>(617) 495-1000  →  6174951000
+617.495.1000    →  6174951000
+6174951000      →  6174951000</pre>`,
+      starter:`# Week 7, Task 3 — Clean Phone Number
+import re
+
+phone = input("Phone: ")
+cleaned = re.sub(r"\\D", "", phone)
+print(cleaned)
+`,
+      tests:[
+        {input:"(617) 495-1000\n", expected:"6174951000"},
+        {input:"617.495.1000\n",   expected:"6174951000"},
+        {input:"6174951000\n",     expected:"6174951000"},
+        {input:"617-495-1000\n",   expected:"6174951000"},
+      ],
+      hints:[
+        '<code>re.sub(r"\\D", "", phone)</code> replaces every non-digit with "".',
+        "\\D is the complement of \\d (matches anything that is NOT a digit).",
+        "re.sub(pattern, replacement, string) → returns new string.",
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 8 · OBJECT-ORIENTED PROGRAMMING ──────────
+{
+  number: 8, title: "Object-Oriented Programming",
+  intro: "Model entities with classes, methods, properties, and special methods.",
+  tasks: [
+    {
+      id:"w8t1", title:"Student Class", concept:"class, __init__, __str__",
+      description:`Create a Student class with name and house, and a __str__ method.
+
+<pre>Input: Harry  then  Gryffindor
+Output: Harry from Gryffindor</pre>`,
+      starter:`# Week 8, Task 1 — Student Class
+
+class Student:
+    def __init__(self, name, house):
+        self.name = name
+        self.house = house
+
+    def __str__(self):
+        return f"{self.name} from {self.house}"
+
+
+name  = input("Name: ")
+house = input("House: ")
+student = Student(name, house)
+print(student)
+`,
+      tests:[
+        {input:"Harry\nGryffindor\n", expected:"Harry from Gryffindor"},
+        {input:"Draco\nSlytherin\n",  expected:"Draco from Slytherin"},
+      ],
+      hints:[
+        "<code>def __init__(self, name, house): self.name = name; self.house = house</code>",
+        '<code>def __str__(self): return f"{self.name} from {self.house}"</code>',
+        "__str__ is called automatically when you pass an object to print().",
+      ],
+    },
+    {
+      id:"w8t2", title:"Property with Validation", concept:"@property, @setter",
+      description:`Add house validation using @property. Valid houses: Gryffindor, Slytherin, Ravenclaw, Hufflepuff.
+
+<pre>Harry / Gryffindor   →  Harry from Gryffindor
+Harry / InvalidHouse →  Invalid house</pre>`,
+      starter:`# Week 8, Task 2 — Property with Validation
+
+class Student:
+    def __init__(self, name, house):
+        self.name  = name
+        self.house = house   # triggers the setter
+
+    @property
+    def house(self):
+        return self._house
+
+    @house.setter
+    def house(self, house):
+        if house not in ["Gryffindor", "Slytherin", "Ravenclaw", "Hufflepuff"]:
+            raise ValueError("Invalid house")
+        self._house = house
+
+    def __str__(self):
+        return f"{self.name} from {self.house}"
+
+
+name  = input("Name: ")
+house = input("House: ")
+try:
+    s = Student(name, house)
+    print(s)
+except ValueError:
+    print("Invalid house")
+`,
+      tests:[
+        {input:"Harry\nGryffindor\n",  expected:"Harry from Gryffindor"},
+        {input:"Harry\nInvalidHouse\n",expected:"Invalid house"},
+        {input:"Luna\nRavenclaw\n",    expected:"Luna from Ravenclaw"},
+      ],
+      hints:[
+        "@property creates a getter; @house.setter creates a setter.",
+        "Setting self.house in __init__ automatically calls the setter.",
+        "Store the validated value in self._house (private, with underscore).",
+      ],
+    },
+    {
+      id:"w8t3", title:"Class Method", concept:"@classmethod",
+      description:`Add a class method Student.from_string(s) that parses "Name, House".
+
+<pre>Input: "Harry, Gryffindor"  →  Harry from Gryffindor</pre>`,
+      starter:`# Week 8, Task 3 — Class Method
+
+class Student:
+    def __init__(self, name, house):
+        self.name  = name
+        self.house = house
+
+    @classmethod
+    def from_string(cls, s):
+        name, house = s.split(", ")
+        return cls(name, house)
+
+    def __str__(self):
+        return f"{self.name} from {self.house}"
+
+
+s = input("Student: ")
+student = Student.from_string(s)
+print(student)
+`,
+      tests:[
+        {input:"Harry, Gryffindor\n", expected:"Harry from Gryffindor"},
+        {input:"Draco, Slytherin\n",  expected:"Draco from Slytherin"},
+      ],
+      hints:[
+        "@classmethod takes cls (the class itself) as first param instead of self.",
+        "cls(name, house) is equivalent to Student(name, house).",
+        's.split(", ") → ["Harry", "Gryffindor"]',
+      ],
+    },
+    {
+      id:"w8t4", title:"Operator Overloading", concept:"__add__, __str__",
+      description:`Create a Vector class. Overload + so two vectors can be added.
+
+<pre>v1 = Vector(1, 2),  v2 = Vector(3, 4)
+print(v1 + v2)  →  (4, 6)</pre>`,
+      starter:`# Week 8, Task 4 — Operator Overloading
+
+class Vector:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __add__(self, other):
+        return Vector(self.x + other.x, self.y + other.y)
+
+    def __str__(self):
+        return f"({self.x}, {self.y})"
+
+
+x1, y1 = map(int, input("v1 (x y): ").split())
+x2, y2 = map(int, input("v2 (x y): ").split())
+v1 = Vector(x1, y1)
+v2 = Vector(x2, y2)
+print(v1 + v2)
+`,
+      tests:[
+        {input:"1 2\n3 4\n",  expected:"(4, 6)"},
+        {input:"0 0\n5 5\n",  expected:"(5, 5)"},
+        {input:"-1 3\n1 -3\n",expected:"(0, 0)"},
+      ],
+      hints:[
+        "__add__(self, other) is called when you write v1 + v2.",
+        "Return a new Vector — don't modify self.",
+        '__str__ should return <code>f"({self.x}, {self.y})"</code>',
+      ],
+    },
+  ],
+},
+
+// ────────── WEEK 9 · ET CETERA ──────────
+{
+  number: 9, title: "Et Cetera",
+  intro: "Advanced Python: sets, generators, type hints, and list comprehensions.",
+  tasks: [
+    {
+      id:"w9t1", title:"Unique Words with Sets", concept:"set(), sorted()",
+      description:`Ask for a comma-separated list of words. Print unique words alphabetically, one per line.
+
+<pre>Input:  apple, banana, apple, cherry, banana
+Output:
+apple
+banana
+cherry</pre>`,
+      starter:`# Week 9, Task 1 — Sets
+
+words_input = input("Words: ")
+words  = [w.strip() for w in words_input.split(",")]
+unique = sorted(set(words))
+for word in unique:
+    print(word)
+`,
+      tests:[
+        {input:"apple, banana, apple, cherry, banana\n", expected:"apple\nbanana\ncherry"},
+        {input:"cat, dog, cat\n", expected:"cat\ndog"},
+        {input:"one\n",           expected:"one"},
+      ],
+      hints:[
+        "set() removes duplicates; sorted() returns an alphabetically sorted list.",
+        '.split(",") splits on commas; .strip() removes surrounding spaces.',
+        "The starter is already correct — read it to understand the pattern.",
+      ],
+    },
+    {
+      id:"w9t2", title:"Generator Function", concept:"yield, generators",
+      description:`Write a generator squares_up_to(n) that yields perfect squares (1, 4, 9, …) up to n.
+
+<pre>n=20  →  1  4  9  16   (each on its own line)
+n=25  →  1  4  9  16  25
+n=1   →  1</pre>`,
+      starter:`# Week 9, Task 2 — Generator
+
+def squares_up_to(n):
+    i = 1
+    while i * i <= n:
+        yield i * i
+        i += 1
+
+
+n = int(input("n: "))
+for square in squares_up_to(n):
+    print(square)
+`,
+      tests:[
+        {input:"20\n", expected:"1\n4\n9\n16"},
+        {input:"25\n", expected:"1\n4\n9\n16\n25"},
+        {input:"1\n",  expected:"1"},
+        {input:"3\n",  expected:"1"},
+      ],
+      hints:[
+        "yield pauses the function and hands a value to the caller each time.",
+        "A function with yield is a 'generator function'.",
+        "while i * i &lt;= n: yield i * i; i += 1",
+      ],
+    },
+    {
+      id:"w9t3", title:"Type Hints & List Comprehension", concept:"type annotations, list comprehension",
+      description:`Write two annotated functions and use them.
+
+<pre>Input: Alice, then 1 2 3
+Output:
+Hello, Alice!
+[2, 4, 6]</pre>
+
+Functions:
+• <code>def greet(name: str) -> str:</code>  returns "Hello, &lt;name&gt;!"
+• <code>def double_all(nums: list[int]) -> list[int]:</code>  returns each doubled`,
+      starter:`# Week 9, Task 3 — Type Hints
+
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+
+
+def double_all(nums: list[int]) -> list[int]:
+    return [n * 2 for n in nums]
+
+
+name = input("Name: ")
+print(greet(name))
+
+raw = list(map(int, input("Numbers: ").split()))
+print(double_all(raw))
+`,
+      tests:[
+        {input:"Alice\n1 2 3\n", expected:"Hello, Alice!\n[2, 4, 6]"},
+        {input:"Bob\n5 10\n",    expected:"Hello, Bob!\n[10, 20]"},
+      ],
+      hints:[
+        "Type hints (param: type, -> return) are documentation only — no runtime effect.",
+        "[n * 2 for n in nums] is a list comprehension.",
+        "map(int, ...) converts each element to int; list() materialises it.",
+      ],
+    },
+  ],
+},
+]; // end WEEKS
+
+const TOTAL_TASKS = WEEKS.reduce((s,w)=>s+w.tasks.length,0);
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let pyodide = null;
+let editor  = null;
+
+let state = {
+  currentWeekIdx: null,
+  currentTaskIdx: null,
+  hintIdx: 0,
+  attempts: 0,
+};
+
+function loadProgress() {
+  try { return JSON.parse(localStorage.getItem('cs50p_progress') || '{"completed":[],"score":0}'); }
+  catch { return {completed:[], score:0}; }
+}
+function saveProgress(p) {
+  localStorage.setItem('cs50p_progress', JSON.stringify(p));
+}
+let progress = loadProgress();
+
+// Whether starter/template code is loaded into the editor for tasks you
+// haven't started yet. Turn it off to write the whole solution from scratch.
+function loadStarterSetting() {
+  return localStorage.getItem('cs50p_starter_enabled') !== 'false';
+}
+function saveStarterSetting(enabled) {
+  localStorage.setItem('cs50p_starter_enabled', enabled ? 'true' : 'false');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PYODIDE INIT
+// ═══════════════════════════════════════════════════════════════
+async function initPyodide() {
+  setLoadMsg("Loading Python runtime (first visit takes ~10s)…");
+  self.pyodide = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/" });
+  pyodide = self.pyodide;
+  // Pre-load csv and io
+  await pyodide.loadPackage([]);
+  setLoadMsg("Ready!");
+  document.getElementById('py-status').textContent = 'Python ready ✓';
+  document.getElementById('py-status').style.color = 'var(--success)';
+  document.getElementById('run-btn').disabled = false;
+}
+function setLoadMsg(msg) {
+  document.getElementById('load-msg').textContent = msg;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TEST RUNNER
+// ═══════════════════════════════════════════════════════════════
+function outputsMatch(actual, expected) {
+  actual   = actual.trim();
+  expected = expected.trim();
+  if (actual === expected) return true;
+  const aLines = actual.split('\n');
+  const eLines = expected.split('\n');
+  const n = eLines.length;
+  if (n > aLines.length) return false;
+  const tail = aLines.slice(-n);
+  if (!tail[0].endsWith(eLines[0])) return false;
+  const prefix = tail[0].slice(0, tail[0].length - eLines[0].length);
+  if (prefix && !prefix.endsWith(': ') && !prefix.endsWith('? ')) return false;
+  for (let i = 1; i < n; i++) if (tail[i] !== eLines[i]) return false;
+  return true;
+}
+
+async function runCode(code, inputStr, argv) {
+  if (!pyodide) return { output:'', error:'Python not loaded yet.' };
+  const inputs = inputStr ? inputStr.split('\n') : [];
+  // Remove trailing empty string from split if input ends with \n
+  if (inputs.length > 0 && inputs[inputs.length-1] === '') inputs.pop();
+
+  pyodide.globals.set('_user_code', code);
+  pyodide.globals.set('_test_inputs', pyodide.toPy(inputs));
+  pyodide.globals.set('_test_argv', pyodide.toPy(['answer.py'].concat(argv || [])));
+
+  try {
+    const result = await pyodide.runPythonAsync(`
+import sys, io, builtins, traceback
+
+_inputs = list(_test_inputs)
+_idx = [0]
+
+def _mock_input(prompt=''):
+    if prompt:
+        sys.stdout.write(str(prompt))
+    if _idx[0] >= len(_inputs):
+        return ''
+    v = _inputs[_idx[0]]
+    _idx[0] += 1
+    return v
+
+_original_input = builtins.input
+builtins.input = _mock_input
+sys.argv = list(_test_argv)
+
+_out = io.StringIO()
+_err = io.StringIO()
+_old_out = sys.stdout
+_old_err = sys.stderr
+sys.stdout = _out
+sys.stderr = _err
+
+try:
+    exec(compile(_user_code, 'answer.py', 'exec'), {'__name__':'__main__','__builtins__':builtins})
+except SystemExit:
+    pass
+except Exception as _e:
+    sys.stdout.write('\\n[Error] ' + traceback.format_exc().strip())
+finally:
+    sys.stdout = _old_out
+    sys.stderr = _old_err
+    builtins.input = _original_input
+
+(_out.getvalue(), _err.getvalue())
+`);
+    const [out, err] = result.toJs ? result.toJs() : [result[0], result[1]];
+    return { output: (out||'').trim(), error: (err||'').trim() };
+  } catch(e) {
+    return { output:'', error: e.message };
+  }
+}
+
+async function gradeTask(task, code) {
+  const results = [];
+  for (const test of task.tests) {
+    if (test.validator === 'range_1_to_n') {
+      const {output, error} = await runCode(code, test.input, null);
+      const num = parseInt(output);
+      const pass = !error && !isNaN(num) && num >= 1 && num <= test.n_value;
+      results.push({
+        pass, input: test.input,
+        expected: `A number between 1 and ${test.n_value}`,
+        got: output, error
+      });
+      continue;
+    }
+    if (test.validator === 'heads_tails_sum') {
+      const {output, error} = await runCode(code, test.input, null);
+      let pass = false;
+      const lines = output.split('\n');
+      if (lines.length === 2) {
+        try {
+          const h = parseInt(lines[0].split(': ')[1]);
+          const t = parseInt(lines[1].split(': ')[1]);
+          pass = !isNaN(h) && !isNaN(t) && h+t === test.n_value;
+        } catch {}
+      }
+      results.push({
+        pass, input: test.input,
+        expected: `Heads: X\\nTails: Y  where X+Y==${test.n_value}`,
+        got: output, error
+      });
+      continue;
+    }
+    const {output, error} = await runCode(code, test.input, test.argv);
+    const expected = (test.expected||'').trim();
+    const pass = outputsMatch(output, expected);
+    results.push({ pass, input:(test.input||'').trim(), expected, got:output, error });
+  }
+  return results;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════════
+function buildSidebar() {
+  const el = document.getElementById('week-list');
+  el.innerHTML = '';
+  const done = new Set(progress.completed);
+  WEEKS.forEach((week, wi) => {
+    const tasksDone  = week.tasks.filter(t=>done.has(t.id)).length;
+    const allDone    = tasksDone === week.tasks.length;
+    const isActive   = wi === state.currentWeekIdx;
+
+    const group = document.createElement('div');
+    group.className = 'week-group';
+
+    const header = document.createElement('div');
+    header.className = 'week-header' + (isActive ? ' active-week' : '');
+    header.innerHTML = `<span>W${week.number} · ${week.title}</span>
+      <span class="week-badge ${allDone?'done':''}">${tasksDone}/${week.tasks.length}</span>`;
+    header.onclick = () => toggleWeek(wi);
+
+    const list = document.createElement('div');
+    list.className = 'task-list' + (isActive ? ' open' : '');
+
+    week.tasks.forEach((task, ti) => {
+      const isDone   = done.has(task.id);
+      const isActive = wi === state.currentWeekIdx && ti === state.currentTaskIdx;
+      const item = document.createElement('div');
+      item.className = 'task-item' + (isDone?' done':'') + (isActive?' active':'');
+      item.innerHTML = `<span class="ti-icon">${isDone?'✓':'○'}</span><span>${task.title}</span>`;
+      item.onclick = () => selectTask(wi, ti);
+      list.appendChild(item);
+    });
+
+    group.appendChild(header);
+    group.appendChild(list);
+    el.appendChild(group);
+  });
+}
+
+function updateProgressBar() {
+  const done = progress.completed.length;
+  const pct  = Math.round(done / TOTAL_TASKS * 100);
+  document.getElementById('progress-bar-fill').style.width = pct + '%';
+  document.getElementById('prog-text').textContent = `${done} / ${TOTAL_TASKS} tasks`;
+  document.getElementById('score-text').textContent = `${progress.score} pts`;
+  document.getElementById('score-big').textContent = progress.score;
+}
+
+function toggleWeek(wi) {
+  // If clicking the already-open week, collapse it; otherwise expand
+  if (state.currentWeekIdx === wi) {
+    // keep open — just re-render
+  } else {
+    state.currentWeekIdx = wi;
+    state.currentTaskIdx = null;
+  }
+  buildSidebar();
+}
+
+function selectTask(wi, ti) {
+  state.currentWeekIdx = wi;
+  state.currentTaskIdx = ti;
+  state.hintIdx = 0;
+  state.attempts = 0;
+
+  const week = WEEKS[wi];
+  const task = week.tasks[ti];
+
+  // Header
+  document.getElementById('task-title').textContent = `Week ${week.number} · ${task.title}`;
+  document.getElementById('task-concept').textContent = task.concept;
+
+  // Description
+  const desc = document.getElementById('description-box');
+  desc.innerHTML = task.description.replace(/\n/g, '<br>');
+
+  // Editor — load saved code if you have any; otherwise load the starter
+  // template only if the "Starter code" toggle is on, else start blank.
+  const isDone = progress.completed.includes(task.id);
+  const savedCode = localStorage.getItem('cs50p_code_' + task.id);
+  const starterEnabled = loadStarterSetting();
+  editor.setValue(savedCode || (starterEnabled ? task.starter : ''));
+  editor.clearHistory();
+  setTimeout(() => editor.refresh(), 0);
+
+  // Results
+  document.getElementById('results-panel').style.display = 'none';
+  document.getElementById('results-inner').innerHTML = '';
+  document.getElementById('run-status').textContent = '';
+
+  // Hints
+  document.getElementById('hints-panel').classList.add('collapsed');
+  renderHints(task, 0);
+
+  // Overlay
+  document.getElementById('success-overlay').classList.remove('show');
+
+  buildSidebar();
+  updateProgressBar();
+}
+
+function renderHints(task, revealed) {
+  const el = document.getElementById('hints-content');
+  el.innerHTML = '';
+  task.hints.forEach((h, i) => {
+    const div = document.createElement('div');
+    if (i < revealed) {
+      div.className = 'hint-item';
+      div.innerHTML = `<strong>Hint ${i+1}:</strong> ${h}`;
+    } else {
+      div.className = 'hint-locked';
+      div.textContent = i === 0 ? 'Click Hints after a failed attempt' : `Hint ${i+1} (locked)`;
+    }
+    el.appendChild(div);
+  });
+}
+
+function showResults(results) {
+  const panel = document.getElementById('results-panel');
+  const inner = document.getElementById('results-inner');
+  panel.style.display = 'block';
+
+  const passed = results.filter(r=>r.pass).length;
+  const total  = results.length;
+  const allPass = passed === total;
+
+  inner.innerHTML = `<div class="result-header" style="color:${allPass?'var(--success)':'var(--error)'}">
+    ${allPass ? '✅' : '❌'} ${passed} / ${total} tests passed
+  </div>`;
+
+  results.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'result-row ' + (r.pass ? 'pass' : 'fail');
+    let detailHtml = `<div class="result-title">Test ${i+1}${r.input?' — input: '+JSON.stringify(r.input.replace(/\n/g,'↵')):''}</div>`;
+    if (!r.pass) {
+      detailHtml += `<div class="result-diff">`;
+      if (r.expected !== undefined) {
+        detailHtml += `<div class="diff-line diff-expected">✓ expected: ${escHtml(JSON.stringify(r.expected))}</div>`;
+        detailHtml += `<div class="diff-line diff-got">✗ got:      ${escHtml(JSON.stringify(r.got))}</div>`;
+      }
+      if (r.error) {
+        detailHtml += `<div class="diff-line diff-err">⚠ ${escHtml(r.error.split('\n').pop())}</div>`;
+      }
+      detailHtml += `</div>`;
+    }
+    row.innerHTML = `<div class="result-icon">${r.pass ? '✅' : '❌'}</div><div class="result-details">${detailHtml}</div>`;
+    inner.appendChild(row);
+  });
+
+  panel.scrollIntoView({ behavior:'smooth', block:'end' });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function findNextTask() {
+  const done = new Set(progress.completed);
+  for (let wi=0; wi<WEEKS.length; wi++) {
+    for (let ti=0; ti<WEEKS[wi].tasks.length; ti++) {
+      if (!done.has(WEEKS[wi].tasks[ti].id)) return {wi,ti};
+    }
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('run-btn').addEventListener('click', async () => {
+  if (state.currentWeekIdx === null || state.currentTaskIdx === null) return;
+
+  const task = WEEKS[state.currentWeekIdx].tasks[state.currentTaskIdx];
+  const code = editor.getValue();
+
+  // Save code draft
+  localStorage.setItem('cs50p_code_' + task.id, code);
+
+  const btn = document.getElementById('run-btn');
+  const statusEl = document.getElementById('run-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running…';
+  statusEl.textContent = '';
+
+  try {
+    const results = await gradeTask(task, code);
+    showResults(results);
+    state.attempts++;
+
+    const passed = results.filter(r=>r.pass).length;
+    if (passed === results.length) {
+      // Mark complete
+      if (!progress.completed.includes(task.id)) {
+        progress.completed.push(task.id);
+        const pts = Math.max(1, 4 - state.attempts + 1);
+        progress.score += pts;
+        saveProgress(progress);
+        statusEl.textContent = `+${pts} pt${pts>1?'s':''}!`;
+        statusEl.style.color = 'var(--success)';
+      } else {
+        statusEl.textContent = 'Already completed ✓';
+        statusEl.style.color = 'var(--muted)';
+      }
+      updateProgressBar();
+      buildSidebar();
+      // Show success overlay
+      const next = findNextTask();
+      document.getElementById('success-msg').textContent =
+        next ? `Score: ${progress.score} pts — ready for the next challenge?` : '🎉 You finished all 34 tasks!';
+      document.getElementById('next-btn').style.display = next ? '' : 'none';
+      document.getElementById('success-overlay').classList.add('show');
+    } else {
+      // Reveal one more hint
+      if (state.attempts > 0 && state.hintIdx < task.hints.length) {
+        state.hintIdx++;
+        renderHints(task, state.hintIdx);
+      }
+      statusEl.textContent = `Attempt ${state.attempts} — check the results below`;
+      statusEl.style.color = 'var(--muted)';
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Run Tests';
+  }
+});
+
+document.getElementById('hint-btn').addEventListener('click', () => {
+  if (state.currentWeekIdx === null) return;
+  const task = WEEKS[state.currentWeekIdx].tasks[state.currentTaskIdx];
+  const panel = document.getElementById('hints-panel');
+  if (panel.classList.contains('collapsed')) {
+    panel.classList.remove('collapsed');
+    if (state.hintIdx === 0 && state.attempts > 0) {
+      state.hintIdx = 1;
+      renderHints(task, state.hintIdx);
+    }
+  } else {
+    panel.classList.add('collapsed');
+  }
+});
+
+document.getElementById('hints-close').addEventListener('click', () => {
+  document.getElementById('hints-panel').classList.add('collapsed');
+});
+
+document.getElementById('skip-btn').addEventListener('click', () => {
+  if (state.currentWeekIdx === null) return;
+  const next = findNextTask();
+  document.getElementById('success-overlay').classList.remove('show');
+  if (next) selectTask(next.wi, next.ti);
+});
+
+// "Starter code" toggle — lets you write a task fully from scratch instead
+// of starting from the provided template.
+const starterToggleInput = document.getElementById('starter-toggle-input');
+starterToggleInput.checked = loadStarterSetting();
+starterToggleInput.addEventListener('change', () => {
+  saveStarterSetting(starterToggleInput.checked);
+  if (state.currentWeekIdx === null || state.currentTaskIdx === null) return;
+  const task = WEEKS[state.currentWeekIdx].tasks[state.currentTaskIdx];
+  const savedCode = localStorage.getItem('cs50p_code_' + task.id);
+  // Only swap the editor content if you haven't written/saved anything yet —
+  // never clobber existing work just because the toggle changed.
+  if (!savedCode) {
+    editor.setValue(starterToggleInput.checked ? task.starter : '');
+    editor.clearHistory();
+    setTimeout(() => editor.refresh(), 0);
+  }
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (state.currentWeekIdx === null || state.currentTaskIdx === null) return;
+  const task = WEEKS[state.currentWeekIdx].tasks[state.currentTaskIdx];
+  if (!confirm('Clear your saved code for this task and reload it ' +
+               (starterToggleInput.checked ? 'with the starter template' : 'blank') + '?')) {
+    return;
+  }
+  localStorage.removeItem('cs50p_code_' + task.id);
+  editor.setValue(starterToggleInput.checked ? task.starter : '');
+  editor.clearHistory();
+  setTimeout(() => editor.refresh(), 0);
+});
+
+document.getElementById('next-btn').addEventListener('click', () => {
+  document.getElementById('success-overlay').classList.remove('show');
+  const next = findNextTask();
+  if (next) selectTask(next.wi, next.ti);
+});
+
+document.getElementById('stay-btn').addEventListener('click', () => {
+  document.getElementById('success-overlay').classList.remove('show');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  // Init CodeMirror
+  editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
+    mode: 'python',
+    theme: 'dracula',
+    lineNumbers: true,
+    autoCloseBrackets: true,
+    matchBrackets: true,
+    indentUnit: 4,
+    tabSize: 4,
+    indentWithTabs: false,
+    extraKeys: { Tab: cm => cm.replaceSelection('    ') },
+    lineWrapping: false,
+  });
+
+  // Resize CodeMirror to fill container
+  function resizeEditor() {
+    const wrap = document.getElementById('editor-wrap');
+    editor.setSize(null, wrap.offsetHeight);
+    editor.refresh();
+  }
+  window.addEventListener('resize', resizeEditor);
+  setTimeout(resizeEditor, 100);
+
+  // Build initial sidebar
+  buildSidebar();
+  updateProgressBar();
+
+  // Load Pyodide
+  try {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js';
+    script.onload = async () => {
+      await initPyodide();
+      // Show app
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').classList.add('ready');
+      // The editor was created while #app was display:none, so CodeMirror's
+      // internal gutter/width measurements were taken against a zero-size
+      // container (causing overlapping line numbers/text). Now that the app
+      // is visible and laid out, force it to re-measure and redraw.
+      resizeEditor();
+      requestAnimationFrame(() => { resizeEditor(); editor.refresh(); });
+      setTimeout(() => { resizeEditor(); editor.refresh(); }, 150);
+      // Auto-select first incomplete task
+      const next = findNextTask();
+      if (next) selectTask(next.wi, next.ti);
+    };
+    script.onerror = () => {
+      setLoadMsg('Failed to load Python runtime. Check your internet connection.');
+    };
+    document.head.appendChild(script);
+  } catch(e) {
+    setLoadMsg('Error: ' + e.message);
+  }
+});
+</script>
+</body>
+</html>
